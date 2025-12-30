@@ -1,0 +1,90 @@
+From 992a3d2458ff454e0c6f933858c5fced5611fd3b Mon Sep 17 00:00:00 2001
+From: hasteful <hasteful@deepfake.jp>
+Date: Sun, 28 Dec 2025 14:00:00 -0800
+Subject: [PATCH] Adds user_hostname and user_servername settings to support
+ USER hostname and servername override
+
+---
+ src/core/servers-setup.c         | 2 ++
+ src/irc/core/irc-core.c          | 2 ++
+ src/irc/core/irc-servers-setup.c | 8 ++++++++
+ src/irc/core/irc-servers.c       | 5 ++++-
+ src/irc/core/irc-servers.h       | 2 ++
+ 5 files changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/src/core/servers-setup.c b/src/core/servers-setup.c
+index ff3d6584..9d25aec7 100644
+--- a/src/core/servers-setup.c
++++ b/src/core/servers-setup.c
+@@ -769,6 +769,8 @@ void servers_setup_init(void)
+ 
+ 	settings_add_str("server", "nick", NULL);
+ 	settings_add_str("server", "user_name", NULL);
++	settings_add_str("server", "user_hostname", NULL);
++	settings_add_str("server", "user_servername", NULL);
+ 	settings_add_str("server", "real_name", NULL);
+ 
+ 	settings_add_bool("proxy", "use_proxy", FALSE);
+diff --git a/src/irc/core/irc-core.c b/src/irc/core/irc-core.c
+index 136bff85..9067accc 100644
+--- a/src/irc/core/irc-core.c
++++ b/src/irc/core/irc-core.c
+@@ -75,6 +75,8 @@ static void destroy_server_connect(SERVER_CONNECT_REC *conn)
+ 
+ 	g_free_not_null(ircconn->usermode);
+ 	g_free_not_null(ircconn->alternate_nick);
++	g_free_not_null(ircconn->user_hostname);
++	g_free_not_null(ircconn->user_servername);
+ 	g_free_not_null(ircconn->sasl_username);
+ 	g_free_not_null(ircconn->sasl_password);
+ 
+diff --git a/src/irc/core/irc-servers-setup.c b/src/irc/core/irc-servers-setup.c
+index 2d94a48b..de1f3381 100644
+--- a/src/irc/core/irc-servers-setup.c
++++ b/src/irc/core/irc-servers-setup.c
+@@ -66,6 +66,14 @@ static void sig_server_setup_fill_connect(IRC_SERVER_CONNECT_REC *conn, GHashTab
+ 	value = settings_get_str("usermode");
+ 	conn->usermode = (value != NULL && *value != '\0') ?
+ 		g_strdup(value) : NULL;
++
++	value = settings_get_str("user_hostname");
++	conn->user_hostname = (value != NULL && *value != '\0' && strchr(value, ' ') == NULL) ?
++		g_strdup(value) : NULL;
++
++	value = settings_get_str("user_servername");
++	conn->user_servername = (value != NULL && *value != '\0' && strchr(value, ' ') == NULL) ?
++		g_strdup(value) : NULL;
+ }
+ 
+ static void sig_server_setup_fill_optlist(IRC_SERVER_CONNECT_REC *conn, GHashTable *optlist)
+diff --git a/src/irc/core/irc-servers.c b/src/irc/core/irc-servers.c
+index 7e8fdb5a..b2574620 100644
+--- a/src/irc/core/irc-servers.c
++++ b/src/irc/core/irc-servers.c
+@@ -246,7 +246,10 @@ static void server_init_2(IRC_SERVER_REC *server)
+ 	if (ptr != NULL)
+ 		*ptr = '\0';
+ 
+-	cmd = g_strdup_printf("USER %s %s %s :%s", username, username, address, conn->realname);
++	cmd = g_strdup_printf("USER %s %s %s :%s", username,
++				conn->user_hostname ? conn->user_hostname : username,
++				conn->user_servername ? conn->user_servername : address,
++				conn->realname);
+ 	irc_send_cmd_now(server, cmd);
+ 	g_free(cmd);
+ 	g_free(username);
+diff --git a/src/irc/core/irc-servers.h b/src/irc/core/irc-servers.h
+index 53ff1436..99db1e28 100644
+--- a/src/irc/core/irc-servers.h
++++ b/src/irc/core/irc-servers.h
+@@ -50,6 +50,8 @@ struct _IRC_SERVER_CONNECT_REC {
+ 
+ 	char *usermode;
+ 	char *alternate_nick;
++	char *user_hostname;
++	char *user_servername;
+ 
+ 	int sasl_mechanism;
+ 	char *sasl_username;
+-- 
+2.50.1
